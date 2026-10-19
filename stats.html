@@ -36,7 +36,7 @@
 <body>
 <header>
   <h1>시세 통계</h1><span class="meta" id="meta"></span>
-  <div class="note">실가치 = 최근 3분기 국토부 실거래의 전용 3.3㎡당 중앙값 · 감정가는 진행 중 경매 · 호가는 붙여넣은 네이버 매물 · <a href="./">경매 지도로 →</a></div>
+  <div class="note">실가치 = 최근 3분기 국토부 실거래의 전용 3.3㎡당 중앙값 · 최근 3개월 변화는 직전 3개월 대비, 어느 쪽이든 5건 미만이면 흐리게(신축·위치 차이로 튀기 쉬움) · 감정가는 진행 중 경매 · 호가는 붙여넣은 네이버 매물 · <a href="./">경매 지도로 →</a></div>
   <div class="bar" id="bar"></div>
 </header>
 <main>
@@ -89,7 +89,14 @@ function cols() {
     ["dong", "동", r => r.dong], ["gu", "구", r => r.gu],
     ["value", "실가치 (전용 평당)", r => fmt(r.value)], ["n", "3분기 거래", r => r.n + "건"],
     ["price", "매매가 중앙값", r => fmt(r.price)],
-    ["chg", "최근 3개월 변화", r => r.chg == null ? "<span class='dim'>–</span>" : `<span class="${r.chg > 0 ? "up" : "down"}">${r.chg > 0 ? "+" : ""}${r.chg}%</span>`],
+    ["chg", "최근 3개월 변화", r => {
+      if (r.chg == null) return "<span class='dim'>–</span>";
+      const n = r.chg_n || [99, 99], few = Math.min(n[0], n[1]) < 5;
+      const v = `${r.chg > 0 ? "+" : ""}${r.chg}%`;
+      // 거래가 적으면 신축·위치 차이로 숫자가 튐 → 흐리게 + 표본 수 표시
+      return few ? `<span class="dim" title="최근 ${n[0]}건 vs 직전 ${n[1]}건 — 표본이 적어 참고만">${v} <small>(${n[0]}건 vs ${n[1]}건)</small></span>`
+                 : `<span class="${r.chg > 0 ? "up" : "down"}">${v}</span>`;
+    }],
     ...(state.kind === "rh" ? [["land", "지분 평당", r => fmt(r.land)]] : []),
     ["appraised", "감정가 / 실가치", r => r.appraised ? `${pct(r.appraised[0], r.value)}% <span class="dim">(${r.appraised[1]}건)</span>` : "<span class='dim'>–</span>"],
     ["lowest", "경매 최저가 / 실가치", r => r.lowest ? `${pct(r.lowest[0], r.value)}%` : "<span class='dim'>–</span>"],
