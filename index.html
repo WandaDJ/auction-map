@@ -193,6 +193,16 @@ const VERDICT = { "후보": "#7c3aed", "보류": "#a78bfa", "미검토": "#c4b5f
 const nvLinks = ids => (ids || []).slice(0, 3).map((id, i) => `<a class="nv" target="_blank" rel="noopener" href="https://fin.land.naver.com/articles/${id}">네이버${ids.length > 1 ? " " + (i + 1) : ""}↗</a>`).join(" ");
 DATA.dong_groups = DATA.dong_groups || [];
 let shownListings = [];
+// 네이버 매물의 구: 저장된 값 → 검색어("서울 마포구 …") → 가장 가까운 경매 물건의 구
+function guOf(l) {
+  if (l._gu !== undefined) return l._gu;
+  let g = l.gu || ((l.query || "").match(/서울\s+(\S+구)(?:\s|$)/) || [])[1];
+  if ((!g || !DATA.districts.includes(g)) && l.lat != null) {
+    let best = Infinity;
+    DATA.rows.forEach(r => { if (r.lat == null) return; const d = (r.lat - l.lat) ** 2 + ((r.lng - l.lng) * 0.79) ** 2; if (d < best) { best = d; g = r.sgg; } });
+  }
+  return l._gu = g || null;
+}
 const lmarkers = new Map();
 function renderListings() {
   listingLayer.clearLayers(); shownListings = []; lmarkers.clear();
@@ -200,6 +210,7 @@ function renderListings() {
   const shareOn = state.shareMin != null || state.shareMax != null;
   DATA.dong_groups.forEach(g0 => {
     if (shareOn || state.zoneOnly) return;  // 위치 미상 매물은 지분·구역 판정 불가 → 숨김
+    if (!state.sggs.has(guOf(g0))) return;  // 구 칩 켜기/끄기 적용
     const items = g0.items.filter(i => inRange(i.exc_py ?? null, state.excMin, state.excMax) && (i.price || 0) <= state.max);
     if (!items.length) return;
     const g = { ...g0, items, n: items.length };
@@ -212,6 +223,7 @@ function renderListings() {
   });
   DATA.listings.forEach(l => {
     if (l.lat == null || (l.price || 0) > state.max) return;  // 가격 상한은 네이버 매물에도 적용
+    if (!state.sggs.has(guOf(l))) return;  // 구 칩 켜기/끄기는 네이버 매물에도 적용
     if (state.zoneOnly && !l.zone) return;  // '관심 구역 반경 안만'은 네이버 매물에도 적용
     // 면적 필터: 값이 범위 밖이면 숨기고, 값이 아예 없으면 흐리게 남겨둠(구역 안 매물을 놓치지 않도록)
     const shareSet = state.shareMin != null || state.shareMax != null, excSet = state.excMin != null || state.excMax != null;
