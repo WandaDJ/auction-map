@@ -168,7 +168,7 @@ function renderListings() {
   const shareOn = state.shareMin != null || state.shareMax != null;
   DATA.dong_groups.forEach(g0 => {
     if (shareOn) return;  // 위치 미상 매물은 대지지분 정보가 없음
-    const items = g0.items.filter(i => inRange(i.exc_py ?? null, state.excMin, state.excMax));
+    const items = g0.items.filter(i => inRange(i.exc_py ?? null, state.excMin, state.excMax) && (i.price || 0) <= state.max);
     if (!items.length) return;
     const g = { ...g0, items, n: items.length };
     const icon = L.divIcon({ className: "", iconAnchor: [30, 12], html: `<div class="dg">${g.dong} ${g.n}건</div>` });
@@ -179,7 +179,7 @@ function renderListings() {
       { maxWidth: 340 }).addTo(listingLayer);
   });
   DATA.listings.forEach(l => {
-    if (l.lat == null) return;
+    if (l.lat == null || (l.price || 0) > state.max) return;  // 가격 상한은 네이버 매물에도 적용
     // 면적 필터: 값이 범위 밖이면 숨기고, 값이 아예 없으면 흐리게 남겨둠(구역 안 매물을 놓치지 않도록)
     const shareSet = state.shareMin != null || state.shareMax != null, excSet = state.excMin != null || state.excMax != null;
     if (shareSet && lShare(l) != null && !inRange(lShare(l), state.shareMin, state.shareMax)) return;
@@ -274,7 +274,7 @@ function buildFilters() {
   const f = document.getElementById("filters");
   const sel = document.createElement("select");
   sel.className = "chip";
-  [[3e8, "감정가 3억 이하"], [3.5e8, "3.5억 이하"], [4e8, "4억 이하"], [5e8, "5억 이하"], [1e13, "전체 가격"]].forEach(([v, t]) => {
+  [[3e8, "3억 이하"], [3.5e8, "3.5억 이하"], [4e8, "4억 이하"], [5e8, "5억 이하"], [1e13, "전체 가격"]].forEach(([v, t]) => {
     const o = document.createElement("option"); o.value = v; o.textContent = t; if (v === state.max) o.selected = true; sel.appendChild(o);
   });
   sel.addEventListener("change", () => { state.max = Number(sel.value); render(); });
