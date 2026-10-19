@@ -52,7 +52,7 @@ const PY = 3.305785;
 const fmt = n => n == null ? "–" : n >= 1e8 ? (n / 1e8).toFixed(2).replace(/\.?0+$/, "") + "억" : Math.round(n / 1e4).toLocaleString() + "만";
 const pct = (a, b) => a && b ? Math.round(a / b * 100) : null;
 const med = xs => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
-const F0 = { pyMin: null, pyMax: null, prMin: null, prMax: null, yMin: null, yMax: null, nMin: 3 };
+const F0 = { pyMin: null, pyMax: null, prMin: null, prMax: null, yMin: null, yMax: null, nMin: 3, noStudio: true };
 const state = { kind: "rh", gu: "전체", q: "", sort: "value", desc: true, view: "dong", open: null, ...F0 };
 try { Object.assign(state, JSON.parse(localStorage.getItem("stats-filters") || "{}"), { open: null }); } catch (e) {}
 const save = () => { try { const { open, ...rest } = state; localStorage.setItem("stats-filters", JSON.stringify(rest)); } catch (e) {} };
@@ -79,16 +79,26 @@ function yearBounds() {
   if (state.yMax != null) state.yMax >= 1000 ? up("hi", state.yMax) : up("lo", NOW_Y - state.yMax);
   return [lo, hi];
 }
+// 아파트 실거래에 섞인 도시형생활주택·원룸형(이름이 '오피스텔'인 곳 포함): 단지명 또는 전용 중앙값 30㎡ 미만
+function studioSet(K) {
+  if (K._studio) return K._studio;
+  const s = new Set(), areas = {};
+  K.t.c.forEach((c, i) => { if (c >= 0) (areas[c] = areas[c] || []).push(K.t.a[i]); });
+  K.cx.forEach(([, name, flag], i) => { if (flag || /오피스텔|도시형/.test(name) || (areas[i] && med(areas[i]) < 300)) s.add(i); });
+  return K._studio = s;
+}
 let CACHE = { key: null };
 function compute() {
-  const key = JSON.stringify([state.kind, state.pyMin, state.pyMax, state.prMin, state.prMax, state.yMin, state.yMax]);
+  const key = JSON.stringify([state.noStudio, state.kind, state.pyMin, state.pyMax, state.prMin, state.prMax, state.yMin, state.yMax]);
   if (CACHE.key === key) return CACHE;
   const K = S.kinds[state.kind];
   if (!K) return CACHE = { key, dongs: [], cx: [] };
   const M = S.months.length, from = M - S.value_months, T = K.t;
   const D = K.dongs.map(([gu, dong]) => ({ gu, dong, v: [], price: [], land: [], m: Array.from({ length: M }, () => []), years: [] }));
   const C = K.cx.map(([di, name]) => ({ di, name, v: [], years: [], areas: {}, last: null }));
+  const studio = state.noStudio ? studioSet(K) : null;
   for (let i = 0; i < T.d.length; i++) {
+    if (studio && T.c[i] >= 0 && studio.has(T.c[i])) continue;
     if (!pass(T.a[i], T.p[i], T.y[i])) continue;
     const d = D[T.d[i]], ppy = T.p[i] * 1e4 / (T.a[i] / 10 / PY);
     d.m[T.m[i]].push(ppy);
@@ -159,6 +169,13 @@ function bar() {
   const ni = n.querySelector("input"); ni.value = state.nMin ?? "";
   ni.oninput = () => { state.nMin = ni.value === "" ? 1 : Math.max(1, Number(ni.value)); save(); renderTable(); };
   f.appendChild(n);
+  if (state.kind === "apt") {
+    const s = document.createElement("label"); s.className = "range";
+    s.innerHTML = `<input type="checkbox"> 원룸형·도시형·'오피스텔' 이름 단지 제외 <span class="dim">(${studioSet(S.kinds.apt).size}개 단지)</span>`;
+    const cb = s.querySelector("input"); cb.checked = !!state.noStudio;
+    cb.onchange = () => { state.noStudio = cb.checked; state.open = null; save(); renderTable(); };
+    f.appendChild(s);
+  }
   const r = document.createElement("button"); r.className = "reset"; r.textContent = "필터 초기화";
   r.onclick = () => { Object.assign(state, F0); save(); render(); }; f.appendChild(r);
 }
