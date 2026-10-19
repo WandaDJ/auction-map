@@ -60,6 +60,9 @@
   .leaflet-popup-content a { color: var(--zone); }
   .pop-h { font-weight: 700; margin-bottom: 4px; }
   .pop-k { color: #6b6a66; }
+  .leaflet-tooltip.stlabel { background: rgba(255,255,255,.92); border: 1px solid rgba(0,0,0,.18); border-radius: 6px; padding: 1px 5px; font: 600 11px/1.3 system-ui; color: #1f1e1c; box-shadow: none; }
+  .leaflet-tooltip.stlabel.tr { font-weight: 800; font-size: 12px; }
+  .leaflet-tooltip.stlabel::before { display: none; }
   .leaflet-tooltip.zlabel { background: transparent; border: 0; box-shadow: none; color: var(--zone); font: 700 11px/1 system-ui; padding: 0; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
   .leaflet-tooltip.zlabel::before { display: none; }
   .leaflet-tooltip.zlabel.st { color: #b45309; font-weight: 600; font-size: 10px; }
@@ -143,6 +146,28 @@ L.marker([HOME.lat, HOME.lng], { icon: L.divIcon({ className: "", iconAnchor: [8
   html: `<div style="width:16px;height:16px;border-radius:50%;background:#0ea5e9;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.3)"></div>` }),
   zIndexOffset: 1000 }).bindPopup(`<div class="pop-h">${HOME.name}</div><span class="pop-k">거리 필터 기준점</span>`).addTo(map);
 const homeRing = L.circle([HOME.lat, HOME.lng], { radius: 1, color: "#0ea5e9", weight: 1.5, dashArray: "4 6", fill: false, interactive: false }).addTo(map);
+// 지하철역: 항상 보이게(노선 색 테두리), 줌에 따라 크기·이름 표시
+map.createPane("stations"); map.getPane("stations").style.zIndex = 460;
+const stationLayer = L.layerGroup().addTo(map);
+function drawStations() {
+  stationLayer.clearLayers();
+  const z = map.getZoom();
+  (DATA.stations || []).forEach(s => {
+    const transfer = (s.lines || []).length >= 2;
+    const r = z >= 15 ? 9 : z >= 13 ? 7 : transfer ? 5 : 4;
+    const ring = (s.colors && s.colors.length) ? s.colors : ["#444"];
+    // 환승역은 노선 색 원을 겹쳐서 표시
+    ring.slice(0, 3).forEach((c, i) => L.circleMarker([s.lat, s.lng], {
+      pane: "stations", radius: r + (ring.length - 1 - i) * 2.5, color: c, weight: 3, fillColor: "#fff", fillOpacity: 1, interactive: i === ring.length - 1,
+    }).addTo(stationLayer));
+    const showLabel = z >= 13 || (z >= 12 && transfer) || (z >= 11 && s.lines && s.lines.length >= 3);
+    const m = L.circleMarker([s.lat, s.lng], { pane: "stations", radius: r + 2, opacity: 0, fillOpacity: 0 })
+      .bindPopup(`<div class="pop-h">${s.name}역</div><span class="pop-k">${(s.lines || []).join(" · ") || "노선 정보 없음"}</span>`);
+    if (showLabel) m.bindTooltip(s.name, { permanent: true, direction: "right", offset: [r + 2, 0], className: "stlabel" + (transfer ? " tr" : ""), pane: "stations" });
+    m.addTo(stationLayer);
+  });
+}
+map.on("zoomend", drawStations);
 const zoneLayer = L.layerGroup().addTo(map);
 const stLayer = L.layerGroup().addTo(map);
 DATA.zones.forEach(z => {
@@ -302,6 +327,7 @@ function buildFilters() {
   f.appendChild(chip("관심 구역 반경 안만", state.zoneOnly, () => state.zoneOnly = !state.zoneOnly));
   f.appendChild(chip("신규만", state.newOnly, () => state.newOnly = !state.newOnly));
   f.appendChild(chip("◆ 네이버 부동산 매물", state.showListings, () => state.showListings = !state.showListings, null));
+  f.appendChild(chip("🚇 지하철역", true, () => { map.hasLayer(stationLayer) ? map.removeLayer(stationLayer) : map.addLayer(stationLayer); }, null));
   f.appendChild(chip(`신통 구역 ${DATA.zones.filter(z => z.sintong).length}곳`, true, () => { map.hasLayer(stLayer) ? map.removeLayer(stLayer) : map.addLayer(stLayer); }, null));
   const s1 = document.createElement("span"); s1.className = "sep"; f.appendChild(s1);
   Object.entries(STATUS).forEach(([k, v]) =>
@@ -326,6 +352,7 @@ if (DATA.errors.length) warns.push(`수집 오류 ${DATA.errors.length}건: ${DA
 if (warns.length) { const w = document.getElementById("warn"); w.hidden = false; w.textContent = warns.join(" "); }
 buildFilters();
 render();
+drawStations();
 </script>
 </body>
 </html>
