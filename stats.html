@@ -65,9 +65,19 @@ function pass(areaX10, priceMan, year) {
   if (state.pyMax != null && py > state.pyMax) return false;
   if (state.prMin != null && pr < state.prMin) return false;
   if (state.prMax != null && pr > state.prMax) return false;
-  if (state.yMin != null && (!year || year < state.yMin)) return false;
-  if (state.yMax != null && (!year || year > state.yMax)) return false;
+  const [ylo, yhi] = yearBounds();
+  if (ylo != null && (!year || year < ylo)) return false;
+  if (yhi != null && (!year || year > yhi)) return false;
   return true;
+}
+// 연식 입력: 1000 미만이면 '준공 후 N년'(연식), 1000 이상이면 준공연도로 해석
+const NOW_Y = new Date().getFullYear();
+function yearBounds() {
+  let lo = null, hi = null;
+  const up = (k, v) => k === "lo" ? (lo = lo == null ? v : Math.max(lo, v)) : (hi = hi == null ? v : Math.min(hi, v));
+  if (state.yMin != null) state.yMin >= 1000 ? up("lo", state.yMin) : up("hi", NOW_Y - state.yMin);
+  if (state.yMax != null) state.yMax >= 1000 ? up("hi", state.yMax) : up("lo", NOW_Y - state.yMax);
+  return [lo, hi];
 }
 let CACHE = { key: null };
 function compute() {
@@ -143,7 +153,7 @@ function bar() {
   };
   range("전용", "pyMin", "pyMax", "평", 1);
   range("거래가", "prMin", "prMax", "억", 0.5);
-  range("준공", "yMin", "yMax", "년", 1);
+  range("연식", "yMin", "yMax", "년 <span class='dim'>(준공 후 경과 · 1990처럼 연도로 넣어도 됨)</span>", 1);
   const n = document.createElement("span"); n.className = "range";
   n.innerHTML = `3분기 거래 <input type="number" min="1" step="1" style="width:3.6em"> 건 이상`;
   const ni = n.querySelector("input"); ni.value = state.nMin ?? "";

@@ -41,6 +41,10 @@
   main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; }
   #map { height: 100%; min-height: 300px; }
   aside { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+  .ltabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 6px; padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .ltab { flex: 1; border: 0; border-radius: 8px; padding: 6px 8px; background: var(--chip); color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+  .ltab[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-ink); }
+  .cheap { color: var(--clean); font-weight: 600; } .pricey { color: var(--risky); }
   .row { padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
   .row:hover { background: var(--chip); }
   .row .l1 { display: flex; gap: 6px; align-items: center; font-weight: 600; }
@@ -130,12 +134,13 @@ try { const s = JSON.parse(localStorage.getItem("auction-map-filters") || "null"
   if (s) { state.max = s.max;
     // 새로 추가된 구는 기본으로 켜고, 예전에 직접 끈 구만 계속 끔
     state.sggs = new Set(DATA.districts.filter(g => s.sggs.includes(g) || !(s.known || ["마포구", "용산구", "서대문구", "구로구", "은평구", "영등포구"]).includes(g)));
-    if (typeof s.homeKm === "number") state.homeKm = s.homeKm; state.statuses = new Set(s.statuses); state.zoneOnly = s.zoneOnly;
+    if (typeof s.homeKm === "number") state.homeKm = s.homeKm;
+    if (s.listTab) state.listTab = s.listTab; state.statuses = new Set(s.statuses); state.zoneOnly = s.zoneOnly;
     ["shareMin", "shareMax", "excMin", "excMax"].forEach(k => { if (typeof s[k] === "number" && !(k.endsWith("Min") && s[k] <= 0)) state[k] = s[k]; }); } } catch (e) {}
 const persist = () => { try { localStorage.setItem("auction-map-filters", JSON.stringify({
   max: state.max, sggs: [...state.sggs], statuses: [...state.statuses], zoneOnly: state.zoneOnly,
   shareMin: state.shareMin, shareMax: state.shareMax, excMin: state.excMin, excMax: state.excMax,
-  homeKm: state.homeKm, known: DATA.districts })); } catch (e) {} };
+  homeKm: state.homeKm, known: DATA.districts, listTab: state.listTab })); } catch (e) {} };
 
 const map = L.map("map", { zoomControl: true }).setView([37.555, 126.955], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -187,8 +192,10 @@ const listingLayer = L.layerGroup().addTo(map);
 const VERDICT = { "후보": "#7c3aed", "보류": "#a78bfa", "미검토": "#c4b5fd", "제외": "#9ca3af" };
 const nvLinks = ids => (ids || []).slice(0, 3).map((id, i) => `<a class="nv" target="_blank" rel="noopener" href="https://fin.land.naver.com/articles/${id}">네이버${ids.length > 1 ? " " + (i + 1) : ""}↗</a>`).join(" ");
 DATA.dong_groups = DATA.dong_groups || [];
+let shownListings = [];
+const lmarkers = new Map();
 function renderListings() {
-  listingLayer.clearLayers();
+  listingLayer.clearLayers(); shownListings = []; lmarkers.clear();
   if (!state.showListings) return;
   const shareOn = state.shareMin != null || state.shareMax != null;
   DATA.dong_groups.forEach(g0 => {
@@ -219,7 +226,10 @@ function renderListings() {
     const cmp = (bm && bm.per_land_py && l.per_py) ? `<br><span class="pop-k">${bm.dong} 4.5억 이하 실거래 지분 평당 중앙값 ${fmt(bm.per_land_py)} (${bm.n}건) → 이 매물 ${Math.round(l.per_py / bm.per_land_py * 100)}%</span>` : "";
     const bl = b ? `<br><span class="pop-k">건축물대장: ${b.approved || "?"} 사용승인 · ${b.units || "?"}세대 · 대지 ${b.plat_m2 ? Math.round(b.plat_m2) + "㎡" : "?"}${b.avg_share_py ? " · 평균지분 " + b.avg_share_py + "평" : ""}</span>` : "";
     const tr = (l.trades || []).length ? `<br><span class="pop-k">같은 건물 실거래: ${l.trades.slice(0, 4).map(t => `${t.ym} ${fmt(t.price)}(${t.floor}층·지분 ${(t.land / 3.3058).toFixed(1)}평)`).join(" / ")}</span>` : "";
-    L.marker([l.lat, l.lng], { icon }).bindPopup(
+    const lid = l.key || (l.name + "|" + l.query + "|" + l.price);
+    shownListings.push({ l, lid, unknownArea });
+    const lm = L.marker([l.lat, l.lng], { icon }); lmarkers.set(lid, lm);
+    lm.bindPopup(
       `<div class="pop-h">◆ ${l.name} · ${l.verdict}</div>
        <span class="pop-k">네이버 부동산 매물 · ${l.query.replace("서울 ", "")}${l.parcel_by_name ? ` → ${l.parcel} <span style="color:#b45309">(건물명 검색 — 다른 건물일 수 있음)</span>` : ""} · ${l.seen} 확인</span><br>
        매매가 <b>${fmt(l.price)}</b>${lExc(l) ? ` · 전용 ${py1(lExc(l))}평` : ""}${share}${l.share_src ? `<br><span class="pop-k">지분 근거: ${l.share_src}</span>` : ""}${cmp}${bl}${tr}<br>
@@ -250,6 +260,48 @@ function visible(r) {
     && (state.homeKm == null || (kmFromHome(r) != null && kmFromHome(r) <= state.homeKm));
 }
 
+function renderList(rows) {
+  const list = document.getElementById("list");
+  const tab = state.listTab === "naver" ? "naver" : "auction";
+  const nv = shownListings.filter(x => x.l.verdict !== "제외").map(x => {
+    const l = x.l, bm = l.bench, ratio = (bm && bm.per_land_py && l.per_py) ? Math.round(l.per_py / bm.per_land_py * 100) : null;
+    return { ...x, ratio };
+  }).sort((a, b) => (!!b.l.zone - !!a.l.zone) || ((a.ratio ?? 999) - (b.ratio ?? 999)) || ((a.l.price || 0) - (b.l.price || 0)));
+  const head = `<div class="ltabs">
+      <button class="ltab" aria-pressed="${tab === "auction"}" data-tab="auction">경매 <b>${rows.length}</b></button>
+      <button class="ltab" aria-pressed="${tab === "naver"}" data-tab="naver">네이버 매물 <b>${nv.length}</b></button></div>`;
+  let body;
+  if (tab === "auction") {
+    body = rows.length ? rows.map(r => `
+    <div class="row" data-id="${r.id}">
+      <div class="l1"><span>${r.emd} ${r.type}</span><span class="tag ${STATUS[r.status].cls}">${STATUS[r.status].label}</span>
+        ${r.zone ? '<span class="tag t-zone">구역</span>' : ""}${r.new ? '<span class="tag t-new">신규</span>' : ""}</div>
+      <div class="l2">${r.address}</div>
+      <div class="l3">감정 ${fmt(r.appraised)} → 최저 ${fmt(r.lowest)} (${r.ratio ?? "-"}%) · 유찰 ${r.failures} · ${r.date || "미정"}${kmFromHome(r) != null ? ` · ${HOME.name} ${kmFromHome(r).toFixed(1)}km` : ""}${r.bldg || r.land ? ` · 전용 ${py1(excOf(r))}평·지분 ${py1(shareOf(r))}평` : ""}${r.lat == null ? " · 좌표 없음" : ""}</div>
+    </div>`).join("") : `<div class="empty">조건에 맞는 경매 물건이 없어요.</div>`;
+  } else {
+    body = !state.showListings ? `<div class="empty">상단의 "◆ 네이버 부동산 매물"을 켜면 목록이 보여요.</div>`
+      : nv.length ? nv.slice(0, 400).map(({ l, lid, ratio, unknownArea }) => `
+    <div class="row" data-lid="${lid.replace(/"/g, "&quot;")}">
+      <div class="l1"><span style="color:${VERDICT[l.verdict] || "#7c3aed"}">◆</span><span>${l.name}</span>
+        <span class="tag" style="background:var(--chip)">${l.verdict}</span>${l.zone ? '<span class="tag t-zone">구역</span>' : ""}</div>
+      <div class="l2">${l.query.replace("서울 ", "")}${l.zone ? " · " + l.zone : ""}</div>
+      <div class="l3"><b>${fmt(l.price)}</b>${lExc(l) ? ` · 전용 ${py1(lExc(l))}평` : ""}${l.share_py ? ` · 지분 ${l.share_py}평 · 지분 평당 ${fmt(l.per_py)}` : ""}${ratio != null ? ` · <span class="${ratio <= 90 ? "cheap" : ratio >= 120 ? "pricey" : ""}">동 기준 ${ratio}%</span>` : ""}${unknownArea ? " · 면적 정보 없음" : ""}</div>
+    </div>`).join("") + (nv.length > 400 ? `<div class="empty">상위 400건만 표시 — 필터로 좁혀보세요.</div>` : "")
+      : `<div class="empty">조건에 맞는 네이버 매물이 없어요.</div>`;
+  }
+  list.innerHTML = head + body;
+  list.querySelectorAll(".ltab").forEach(b => b.onclick = () => { state.listTab = b.dataset.tab; persist(); renderList(rows); list.scrollTop = 0; });
+  list.querySelectorAll(".row[data-id]").forEach(el => el.addEventListener("click", () => {
+    const m = markers.get(el.dataset.id);
+    if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); }
+  }));
+  list.querySelectorAll(".row[data-lid]").forEach(el => el.addEventListener("click", () => {
+    const m = lmarkers.get(el.dataset.lid);
+    if (m) { map.setView(m.getLatLng(), 17); m.openPopup(); }
+  }));
+}
+
 function render() {
   renderListings();
   markerLayer.clearLayers(); markers.clear();
@@ -265,18 +317,7 @@ function render() {
     }).bindPopup(popup(r));
     m.addTo(markerLayer); markers.set(r.id, m);
   });
-  const list = document.getElementById("list");
-  list.innerHTML = rows.length ? rows.map(r => `
-    <div class="row" data-id="${r.id}">
-      <div class="l1"><span>${r.emd} ${r.type}</span><span class="tag ${STATUS[r.status].cls}">${STATUS[r.status].label}</span>
-        ${r.zone ? '<span class="tag t-zone">구역</span>' : ""}${r.new ? '<span class="tag t-new">신규</span>' : ""}</div>
-      <div class="l2">${r.address}</div>
-      <div class="l3">감정 ${fmt(r.appraised)} → 최저 ${fmt(r.lowest)} (${r.ratio ?? "-"}%) · 유찰 ${r.failures} · ${r.date || "미정"}${kmFromHome(r) != null ? ` · ${HOME.name} ${kmFromHome(r).toFixed(1)}km` : ""}${r.bldg || r.land ? ` · 전용 ${py1(excOf(r))}평·지분 ${py1(shareOf(r))}평` : ""}${r.lat == null ? " · 좌표 없음" : ""}</div>
-    </div>`).join("") : `<div class="empty">조건에 맞는 물건이 없어요.</div>`;
-  list.querySelectorAll(".row").forEach(el => el.addEventListener("click", () => {
-    const m = markers.get(el.dataset.id);
-    if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); }
-  }));
+  renderList(rows);
   const all = DATA.rows;
   document.getElementById("stats").innerHTML = `
     <span>표시 <b>${rows.length}</b>건</span>
