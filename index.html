@@ -192,7 +192,7 @@ function renderListings() {
   if (!state.showListings) return;
   const shareOn = state.shareMin != null || state.shareMax != null;
   DATA.dong_groups.forEach(g0 => {
-    if (shareOn) return;  // 위치 미상 매물은 대지지분 정보가 없음
+    if (shareOn || state.zoneOnly) return;  // 위치 미상 매물은 지분·구역 판정 불가 → 숨김
     const items = g0.items.filter(i => inRange(i.exc_py ?? null, state.excMin, state.excMax) && (i.price || 0) <= state.max);
     if (!items.length) return;
     const g = { ...g0, items, n: items.length };
@@ -205,6 +205,7 @@ function renderListings() {
   });
   DATA.listings.forEach(l => {
     if (l.lat == null || (l.price || 0) > state.max) return;  // 가격 상한은 네이버 매물에도 적용
+    if (state.zoneOnly && !l.zone) return;  // '관심 구역 반경 안만'은 네이버 매물에도 적용
     // 면적 필터: 값이 범위 밖이면 숨기고, 값이 아예 없으면 흐리게 남겨둠(구역 안 매물을 놓치지 않도록)
     const shareSet = state.shareMin != null || state.shareMax != null, excSet = state.excMin != null || state.excMax != null;
     if (shareSet && lShare(l) != null && !inRange(lShare(l), state.shareMin, state.shareMax)) return;
@@ -282,7 +283,7 @@ function render() {
     <span>4억 이하·권리 깨끗 <b>${all.filter(r => r.status === "clean" && r.appraised <= 4e8).length}</b>건</span>
     <span>관심 구역 반경 안 <b>${all.filter(r => r.zone).length}</b>건</span>
     <span>신규 <b>${all.filter(r => r.new).length}</b>건</span>
-    <span>◆ 네이버 부동산 매물 <b>${DATA.listings.filter(l => l.verdict !== "제외" && areaOk(lShare(l), lExc(l))).length}</b>건</span>
+    <span>◆ 네이버 부동산 매물 <b>${DATA.listings.filter(l => l.verdict !== "제외" && l.lat != null && (l.price || 0) <= state.max && (!state.zoneOnly || l.zone) && areaOk(lShare(l), lExc(l))).length}</b>건</span>
     ${areaActive() ? `<span>평수 필터 적용 중 — 면적 정보 없는 경매는 숨김, 네이버 매물은 흐리게</span>` : ""}`;
   persist();
 }
