@@ -211,6 +211,7 @@ function popup(r) {
     <span class="pop-k">${r.case} · ${r.type}</span><br>
     감정가 <b>${fmt(r.appraised)}</b> · 최저 <b>${fmt(r.lowest)}</b> (${r.ratio ?? "-"}%)<br>
     유찰 ${r.failures}회 · 매각기일 <b>${r.date || "미정"}</b><br>
+    ${r.value_py ? `<span class="pop-k">${r.emd} 실가치(최근 3분기 실거래 전용 평당 중앙값) ${fmt(r.value_py)} → 감정가 <b>${r.vs_appr}%</b> · 최저가 <b>${r.vs_low}%</b> · <a href="./stats.html">시세 통계</a></span><br>` : ""}
     전용 ${r.bldg ?? "-"}㎡(${py1(excOf(r))}평) · 대지권 ${r.land ?? "-"}㎡(${py1(shareOf(r))}평)${r.land ? ` · 대지 평당 ${fmt(r.lowest / shareOf(r))}(최저가 기준)` : ""}${d.year ? " · " + d.year + "년" : ""}<br>
     ${rights}<br>
     ${r.zone ? `<span class="tag t-zone">${r.zone} 반경 안(대략)</span><br>` : ""}
@@ -317,7 +318,7 @@ function buildFilters() {
   DATA.districts.forEach(g => { const b = chip(g, state.sggs.has(g), () => state.sggs.has(g) ? state.sggs.delete(g) : state.sggs.add(g)); b.dataset.sgg = g; f.appendChild(b); });
 }
 
-document.getElementById("meta").textContent = `${DATA.updated} 기준 · 리치고 진행 중 경매(주거시설) · 매일 갱신`;
+document.getElementById("meta").innerHTML = `${DATA.updated} 기준 · 리치고 진행 중 경매(주거시설) · 매일 갱신 · <a href="./stats.html">시세 통계 →</a>`;
 const missing = DATA.rows.filter(r => r.lat == null).length;
 const warns = [];
 if (!DATA.geocoding || missing) warns.push(`좌표를 못 찾은 물건 ${missing}건은 목록에만 표시돼요.`);
