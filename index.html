@@ -251,7 +251,7 @@ function renderListings() {
     L.marker([g.lat, g.lng], { icon, zIndexOffset: -500 }).bindPopup(
       `<div class="pop-h">${g.dong} · 위치 미상 매물 ${g.n}건</div>
        <span class="pop-k">이름·지번 없이 올라온 매물이라 동 중심에 모아 표시 · ${fmt(g.min)} ~ ${fmt(g.max)} (중앙 ${fmt(g.median)})</span>
-       <div class="dg-list">${g.items.map(i => `<div><b>${fmt(i.price)}</b> · ${i.note.split(" · ").slice(0, 3).join(" · ")} ${nvLinks(i.ids)}</div>`).join("")}</div>`,
+       <div class="dg-list">${g.items.map(i => `<div><b>${fmt(i.price)}</b> · ${i.note.split(" · ").slice(0, 3).join(" · ")} ${(i.ids || []).length ? nvLinks(i.ids) : `<span class="pop-k">(묶음 매물 · 링크 없음)</span>`}</div>`).join("")}</div>`,
       { maxWidth: 340 }).addTo(listingLayer);
   });
   DATA.listings.forEach(l => {
@@ -279,7 +279,7 @@ function renderListings() {
       `<div class="pop-h">◆ ${l.name} · ${l.verdict}</div>
        <span class="pop-k">네이버 부동산 매물 · ${l.query.replace("서울 ", "")}${l.parcel_by_name ? ` → ${l.parcel} <span style="color:#b45309">(건물명 검색 — 다른 건물일 수 있음)</span>` : ""} · ${l.seen} 확인</span>${etaTxt(l)}<br>
        매매가 <b>${fmt(l.price)}</b>${lExc(l) ? ` · 전용 ${py1(lExc(l))}평` : ""}${share}${l.share_src ? `<br><span class="pop-k">지분 근거: ${l.share_src}</span>` : ""}${cmp}${bl}${tr}<br>
-       ${unknownArea ? `<span class="pop-k">면적 정보가 없어 평수 필터와 상관없이 흐리게 표시</span><br>` : ""}${l.note || ""} ${nvLinks(l.ids)}<br>${l.zone ? `<span class="tag t-zone">${l.zone} 반경 안(대략)</span>` : ""}`).addTo(listingLayer);
+       ${unknownArea ? `<span class="pop-k">면적 정보가 없어 평수 필터와 상관없이 흐리게 표시</span><br>` : ""}${l.note || ""} ${(l.ids || []).length ? nvLinks(l.ids) : `<a class="nv" target="_blank" rel="noopener" href="https://map.naver.com/p/search/${encodeURIComponent(l.query.replace(/^서울\s*/, ""))}">네이버 지도↗</a> <span class="pop-k">(중개사 여러 곳 묶음 매물이라 매물 링크 없음 — 네이버에서 '매물목록 펼치기' 후 붙여넣으면 링크가 생겨요)</span>`}<br>${l.zone ? `<span class="tag t-zone">${l.zone} 반경 안(대략)</span>` : ""}`).addTo(listingLayer);
   });
 }
 const markers = new Map();
