@@ -217,7 +217,7 @@ DATA.zones.forEach(z => {
   L.circle([z.lat, z.lng], {
     radius: Math.max(z.radius, 90), color, weight: z.mine ? 3 : fixed ? 2.4 : st ? 1.2 : 1.5,
     dashArray: z.mine || fixed ? null : st ? "3 5" : "6 6", fillColor: color, fillOpacity: z.mine ? 0.10 : fixed ? 0.22 : st ? 0.06 : 0.05,
-  }).bindPopup(`<div class="pop-h">${z.name}${fixed ? " · 구역지정" : ""}</div>${z.stage}${step}<br><span class="pop-k">${z.area ? `면적 ${Math.round(z.area).toLocaleString()}㎡ · 원은 같은 면적의 대략적 범위${z.radius < 90 ? " (작은 구역이라 원을 조금 키워 표시)" : ""}` : "면적 정보 없음 — 대표지번 위치에 작은 원으로 표시"}${z.approx ? " · 구역명으로 위치를 찾아 오차가 클 수 있음" : ""}${z.sintong ? "<br>출처: 서울시 정비사업 정보몽땅 신속통합기획 선정구역·추진현황" : z.site ? "<br>출처: 서울시 정비사업 정보몽땅 사업장검색" : ""}</span>${sites}${st || z.step ? zoneLinks(z) : ""}`, { maxWidth: 360 })
+  }).bindPopup(`<div class="pop-h">${z.name}${fixed ? " · 구역지정" : ""}</div>${z.stage}${step}<br><span class="pop-k">${z.area ? `면적 ${Math.round(z.area).toLocaleString()}㎡ · 원은 같은 면적의 대략적 범위${z.radius < 90 ? " (작은 구역이라 원을 조금 키워 표시)" : ""}` : "면적 정보 없음 — 대표지번 위치에 작은 원으로 표시"}${z.geo_how ? `<br>위치: ${z.geo_how}${z.geo_addr ? " — " + z.geo_addr : ""}${z.approx ? " <b style='color:#b45309'>(근사 위치 — 위치도로 확인)</b>" : ""}` : z.approx ? " · 구역명으로 위치를 찾아 오차가 클 수 있음" : ""}${z.sintong ? "<br>출처: 서울시 정비사업 정보몽땅 신속통합기획 선정구역·추진현황" : z.site ? "<br>출처: 서울시 정비사업 정보몽땅 사업장검색" : ""}</span>${sites}${st || z.step ? zoneLinks(z) : ""}`, { maxWidth: 360 })
     .bindTooltip(z.name.replace(/\s*\(.*\)/, "").replace(/\s*일대$/, "") + (fixed ? " ✔" : ""), { permanent: !st || fixed, direction: "top", className: "zlabel" + (st ? " st" : "") + (fixed ? " fx" : ""), offset: [0, -4] })
     .addTo(z.site ? siteLayer : st ? stLayer : zoneLayer);
 });
@@ -283,7 +283,7 @@ function renderListings() {
     const lm = L.marker([l.lat, l.lng], { icon }); lmarkers.set(lid, lm);
     lm.bindPopup(
       `<div class="pop-h">◆ ${l.name} · ${l.verdict}</div>
-       <span class="pop-k">네이버 부동산 매물 · ${l.query.replace("서울 ", "")}${l.parcel_by_name ? ` → ${l.parcel} <span style="color:#b45309">(건물명 검색 — 다른 건물일 수 있음)</span>` : ""} · ${l.seen} 확인</span>${etaTxt(l)}<br>
+       <span class="pop-k">네이버 부동산 매물 · ${l.query.replace("서울 ", "")}${l.geo_how ? ` · 위치: ${l.geo_how}${l.geo_addr ? " (" + l.geo_addr + ")" : ""}` : ""}${l.parcel_by_name ? ` → ${l.parcel} <span style="color:#b45309">(건물명 검색 — 다른 건물일 수 있음)</span>` : ""} · ${l.seen} 확인</span>${etaTxt(l)}<br>
        매매가 <b>${fmt(l.price)}</b>${lExc(l) ? ` · 전용 ${py1(lExc(l))}평` : ""}${share}${l.share_src ? `<br><span class="pop-k">지분 근거: ${l.share_src}</span>` : ""}${cmp}${bl}${tr}<br>
        ${unknownArea ? `<span class="pop-k">면적 정보가 없어 평수 필터와 상관없이 흐리게 표시</span><br>` : ""}${l.note || ""} ${(l.ids || []).length ? nvLinks(l.ids) : `<a class="nv" target="_blank" rel="noopener" href="https://map.naver.com/p/search/${encodeURIComponent(l.query.replace(/^서울\s*/, ""))}">네이버 지도↗</a> <span class="pop-k">(중개사 여러 곳 묶음 매물이라 매물 링크 없음 — 네이버에서 '매물목록 펼치기' 후 붙여넣으면 링크가 생겨요)</span>`}<br>${l.zone ? `<span class="tag t-zone">${l.zone} 반경 안(대략)</span>` : ""}`).addTo(listingLayer);
   });
