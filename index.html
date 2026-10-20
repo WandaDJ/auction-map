@@ -205,19 +205,24 @@ function zoneLinks(z) {
     <a target="_blank" rel="noopener" href="https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(nm + " 재개발")}">관련 뉴스↗</a>
     <a target="_blank" rel="noopener" href="https://map.naver.com/p/search/${encodeURIComponent(z.query.replace(/^서울\s*/, ""))}">네이버 지도↗</a></div>`;
 }
+const siteLayer = L.layerGroup().addTo(map);
+const siteLinks = z => (z.sites || []).map(s => `<div class="pop-k">· ${s.name} — <b>${s.step}</b>
+  ${s.cafe ? ` <a target="_blank" rel="noopener" href="https://cleanup.seoul.go.kr/cafe/mainIndx.do?cafeUrl=${encodeURIComponent(s.cafe)}">사업장 홈페이지↗</a>` : ""}
+  ${s.record ? ` <a target="_blank" rel="noopener" href="https://urban.seoul.go.kr/view/map/mapPopup.html?recordCode=${encodeURIComponent(s.record)}">고시 도면↗</a>` : ""}</div>`).join("");
 DATA.zones.forEach(z => {
-  const st = !!z.sintong, fixed = !!z.designated;
+  const st = !!z.sintong || !!z.site, fixed = !!z.designated;
   const color = fixed ? "#9a3412" : st ? "#d97706" : css("--zone");
   const step = z.step ? `<br>현 추진단계 <b>${z.step}</b>${fixed ? ` · <b style="color:#9a3412">구역지정 ${z.designated}</b>` : " · 정비구역 지정 전"}${z.status_name && z.status_name !== z.name ? ` <span class="pop-k">(추진현황 표기: ${z.status_name})</span>` : ""}` : "";
+  const sites = (z.sites || []).length ? `<div style="margin-top:4px"><b>정보몽땅 사업장</b>${siteLinks(z)}</div>` : "";
   L.circle([z.lat, z.lng], {
     radius: Math.max(z.radius, 90), color, weight: z.mine ? 3 : fixed ? 2.4 : st ? 1.2 : 1.5,
     dashArray: z.mine || fixed ? null : st ? "3 5" : "6 6", fillColor: color, fillOpacity: z.mine ? 0.10 : fixed ? 0.22 : st ? 0.06 : 0.05,
-  }).bindPopup(`<div class="pop-h">${z.name}${fixed ? " · 구역지정" : ""}</div>${z.stage}${step}<br><span class="pop-k">면적 ${Math.round(z.area).toLocaleString()}㎡ · 원은 같은 면적의 대략적 범위${z.radius < 90 ? " (작은 구역이라 원을 조금 키워 표시)" : ""}${z.approx ? " · 구역명으로 위치를 찾아 오차가 클 수 있음" : ""}${st ? "<br>출처: 서울시 정비사업 정보몽땅 신속통합기획 선정구역·추진현황" : ""}</span>${st || z.step ? zoneLinks(z) : ""}`)
+  }).bindPopup(`<div class="pop-h">${z.name}${fixed ? " · 구역지정" : ""}</div>${z.stage}${step}<br><span class="pop-k">${z.area ? `면적 ${Math.round(z.area).toLocaleString()}㎡ · 원은 같은 면적의 대략적 범위${z.radius < 90 ? " (작은 구역이라 원을 조금 키워 표시)" : ""}` : "면적 정보 없음 — 대표지번 위치에 작은 원으로 표시"}${z.geo_how ? `<br>위치: ${z.geo_how}${z.geo_addr ? " — " + z.geo_addr : ""}${z.approx ? " <b style='color:#b45309'>(근사 위치 — 위치도로 확인)</b>" : ""}` : z.approx ? " · 구역명으로 위치를 찾아 오차가 클 수 있음" : ""}${z.sintong ? "<br>출처: 서울시 정비사업 정보몽땅 신속통합기획 선정구역·추진현황" : z.site ? "<br>출처: 서울시 정비사업 정보몽땅 사업장검색" : ""}</span>${sites}${st || z.step ? zoneLinks(z) : ""}`, { maxWidth: 360 })
     .bindTooltip(z.name.replace(/\s*\(.*\)/, "").replace(/\s*일대$/, "") + (fixed ? " ✔" : ""), { permanent: !st || fixed, direction: "top", className: "zlabel" + (st ? " st" : "") + (fixed ? " fx" : ""), offset: [0, -4] })
-    .addTo(st ? stLayer : zoneLayer);
+    .addTo(z.site ? siteLayer : st ? stLayer : zoneLayer);
 });
 map.on("zoomend", () => { const show = map.getZoom() >= 14;
-  stLayer.eachLayer(l => { const tt = l.getTooltip(); if (!tt || /\bfx\b/.test(tt.options.className)) return; if (show) { tt.options.permanent = true; l.openTooltip(); } else { tt.options.permanent = false; l.closeTooltip(); } }); });
+  [stLayer, siteLayer].forEach(g => g.eachLayer(l => { const tt = l.getTooltip(); if (!tt || /\bfx\b/.test(tt.options.className)) return; if (show) { tt.options.permanent = true; l.openTooltip(); } else { tt.options.permanent = false; l.closeTooltip(); } })); });
 
 const markerLayer = L.layerGroup().addTo(map);
 const listingLayer = L.layerGroup().addTo(map);
@@ -428,6 +433,7 @@ function buildFilters() {
   f.appendChild(chip("◆ 네이버 부동산 매물", state.showListings, () => state.showListings = !state.showListings, null));
   f.appendChild(chip("🚇 지하철역", true, () => { map.hasLayer(stationLayer) ? map.removeLayer(stationLayer) : map.addLayer(stationLayer); }, null));
   f.appendChild(chip(`신통 ${DATA.zones.filter(z => z.sintong).length}곳 · 진한 실선=구역지정 ${DATA.zones.filter(z => z.sintong && z.designated).length}`, true, () => { map.hasLayer(stLayer) ? map.removeLayer(stLayer) : map.addLayer(stLayer); }, null));
+  f.appendChild(chip(`정비사업장 ${DATA.zones.filter(z => z.site).length}곳`, true, () => { map.hasLayer(siteLayer) ? map.removeLayer(siteLayer) : map.addLayer(siteLayer); }, null));
   const s1 = document.createElement("span"); s1.className = "sep"; f.appendChild(s1);
   Object.entries(STATUS).forEach(([k, v]) =>
     f.appendChild(chip(v.label, state.statuses.has(k), () => state.statuses.has(k) ? state.statuses.delete(k) : state.statuses.add(k), "--" + k)));
