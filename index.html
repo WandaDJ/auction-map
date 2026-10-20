@@ -207,8 +207,8 @@ function zoneLinks(z) {
 }
 DATA.zones.forEach(z => {
   const st = !!z.sintong, fixed = !!z.designated;
-  const color = st ? (fixed ? "#9a3412" : "#d97706") : css("--zone");
-  const step = z.step ? `<br>현 추진단계 <b>${z.step}</b>${fixed ? ` · <b style="color:#9a3412">구역지정 고시 ${z.designated}</b>` : " · 정비구역 지정 전"}${z.status_name && z.status_name !== z.name ? ` <span class="pop-k">(추진현황 표기: ${z.status_name})</span>` : ""}` : "";
+  const color = fixed ? "#9a3412" : st ? "#d97706" : css("--zone");
+  const step = z.step ? `<br>현 추진단계 <b>${z.step}</b>${fixed ? ` · <b style="color:#9a3412">구역지정 ${z.designated}</b>` : " · 정비구역 지정 전"}${z.status_name && z.status_name !== z.name ? ` <span class="pop-k">(추진현황 표기: ${z.status_name})</span>` : ""}` : "";
   L.circle([z.lat, z.lng], {
     radius: Math.max(z.radius, 90), color, weight: z.mine ? 3 : fixed ? 2.4 : st ? 1.2 : 1.5,
     dashArray: z.mine || fixed ? null : st ? "3 5" : "6 6", fillColor: color, fillOpacity: z.mine ? 0.10 : fixed ? 0.22 : st ? 0.06 : 0.05,
