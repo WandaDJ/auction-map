@@ -136,6 +136,11 @@ function etaOf(o) {
   return (o._eta = best);
 }
 const etaOk = o => state.etaMax == null || (etaOf(o) && etaOf(o).min <= state.etaMax);
+
+function luTxt(o) {  // 토지이용계획 한 줄(브이월드, PC 동기화) — 없으면 빈칸
+  return o.landuse ? `<span class="pop-k">토지이용: ${o.landuse}${o.tojihuh ? ' <b style="color:#b45309">(토허 — 일반매매는 허가·실거주 필요, 경매는 면제)</b>' : ""}</span><br>` : "";
+}
+
 const etaTxt = o => { const e = etaOf(o); return e ? ` · 충정로 ~${e.min}분 <span class="dim">(${e.st}역 도보 ${e.walk}분)</span>` : ""; };
 const PY = 3.3058;
 // 평 단위 값: 경매는 대지권·건물(전용)㎡, 네이버 매물은 추정 지분·네이버 전용평
@@ -283,7 +288,7 @@ function renderListings() {
     const lm = L.marker([l.lat, l.lng], { icon }); lmarkers.set(lid, lm);
     lm.bindPopup(
       `<div class="pop-h">◆ ${l.name} · ${l.verdict}</div>
-       <span class="pop-k">네이버 부동산 매물 · ${l.query.replace("서울 ", "")}${l.geo_how ? ` · 위치: ${l.geo_how}${l.geo_addr ? " (" + l.geo_addr + ")" : ""}` : ""}${l.parcel_by_name ? ` → ${l.parcel} <span style="color:#b45309">(건물명 검색 — 다른 건물일 수 있음)</span>` : ""} · ${l.seen} 확인</span>${etaTxt(l)}<br>
+       <span class="pop-k">네이버 부동산 매물 · ${l.query.replace("서울 ", "")}${l.geo_how ? ` · 위치: ${l.geo_how}${l.geo_addr ? " (" + l.geo_addr + ")" : ""}` : ""}${l.parcel_by_name ? ` → ${l.parcel} <span style="color:#b45309">(건물명 검색 — 다른 건물일 수 있음)</span>` : ""} · ${l.seen} 확인</span>${etaTxt(l)}<br>${luTxt(l)}
        매매가 <b>${fmt(l.price)}</b>${lExc(l) ? ` · 전용 ${py1(lExc(l))}평` : ""}${share}${l.share_src ? `<br><span class="pop-k">지분 근거: ${l.share_src}</span>` : ""}${cmp}${bl}${tr}<br>
        ${unknownArea ? `<span class="pop-k">면적 정보가 없어 평수 필터와 상관없이 흐리게 표시</span><br>` : ""}${l.note || ""} ${(l.ids || []).length ? nvLinks(l.ids) : `<a class="nv" target="_blank" rel="noopener" href="https://map.naver.com/p/search/${encodeURIComponent(l.query.replace(/^서울\s*/, ""))}">네이버 지도↗</a> <span class="pop-k">(중개사 여러 곳 묶음 매물이라 매물 링크 없음 — 네이버에서 '매물목록 펼치기' 후 붙여넣으면 링크가 생겨요)</span>`}<br>${l.zone ? `<span class="tag t-zone">${l.zone} 반경 안(대략)</span>` : ""}`).addTo(listingLayer);
   });
@@ -298,7 +303,7 @@ function popup(r) {
   return `<div class="pop-h">${r.address}</div>
     <span class="pop-k">${r.case} · ${r.type}</span><br>
     감정가 <b>${fmt(r.appraised)}</b> · 최저 <b>${fmt(r.lowest)}</b> (${r.ratio ?? "-"}%)<br>
-    유찰 ${r.failures}회 · 매각기일 <b>${r.date || "미정"}</b>${etaTxt(r)}<br>
+    유찰 ${r.failures}회 · 매각기일 <b>${r.date || "미정"}</b>${etaTxt(r)}<br>${luTxt(r)}
     ${r.value_py ? `<span class="pop-k">${r.emd} 실가치(최근 3분기 실거래 전용 평당 중앙값) ${fmt(r.value_py)} → 감정가 <b>${r.vs_appr}%</b> · 최저가 <b>${r.vs_low}%</b> · <a href="./stats.html">시세 통계</a></span><br>` : ""}
     전용 ${r.bldg ?? "-"}㎡(${py1(excOf(r))}평) · 대지권 ${r.land ?? "-"}㎡(${py1(shareOf(r))}평)${r.land ? ` · 대지 평당 ${fmt(r.lowest / shareOf(r))}(최저가 기준)` : ""}${d.year ? " · " + d.year + "년" : ""}<br>
     ${rights}<br>
