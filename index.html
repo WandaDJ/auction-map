@@ -115,33 +115,29 @@ const state = {
   sggs: new Set(DATA.districts),
   statuses: new Set(["clean", "check", "risky", "unknown"]),
   zoneOnly: false, newOnly: false, showListings: true,
-  shareMin: null, shareMax: null, excMin: null, excMax: null, homeKm: null, etaMax: null,
+  shareMin: null, shareMax: null, excMin: null, excMax: null, walkMax: null,
 };
-const HOME = DATA.home || { name: "충정로역", lat: 37.55997, lng: 126.96362 };
-const kmFromHome = r => r.home_km ?? (r.lat == null ? null : map.distance([r.lat, r.lng], [HOME.lat, HOME.lng]) / 1000);
-// 충정로역까지 대중교통 소요시간(추정): 가까운 역까지 도보 + 대기 3분 + 지하철(직선거리×계수) + 2·5호선이 아니면 환승 6분
-const CJ = (DATA.stations || []).find(s => s.name === "충정로") || HOME;
-function etaOf(o) {
-  if (o._eta !== undefined) return o._eta;
-  if (o.lat == null) return (o._eta = null);
+// 가까운 지하철역까지 도보 시간(추정): 직선거리 × 1.25(골목 우회) ÷ 분당 75m. 2km 넘으면 역 없음으로 봄
+function walkOf(o) {
+  if (o._walk !== undefined) return o._walk;
+  if (o.lat == null) return (o._walk = null);
   const km = (a, b, c, d) => Math.hypot((a - c) * 111.0, (b - d) * 88.2);
   let best = null;
   (DATA.stations || []).forEach(s => {
-    const w = km(o.lat, o.lng, s.lat, s.lng); if (w > 1.5) return;
-    const walk = w * 1.25 * 1000 / 75, direct = (s.lines || []).some(x => x === "2호선" || x === "5호선");
-    const ride = s === CJ ? 0 : 3 + km(s.lat, s.lng, CJ.lat, CJ.lng) * (direct ? 2.2 : 2.6) + (direct ? 0 : 6);
-    if (!best || walk + ride < best.min) best = { min: walk + ride, st: s.name, walk: Math.round(walk) };
+    const w = km(o.lat, o.lng, s.lat, s.lng); if (w > 2) return;
+    const min = w * 1.25 * 1000 / 75;
+    if (!best || min < best.min) best = { min, st: s.name, lines: s.lines || [] };
   });
-  if (best) best.min = Math.round(best.min);
-  return (o._eta = best);
+  if (best) best.min = Math.max(1, Math.round(best.min));
+  return (o._walk = best);
 }
-const etaOk = o => state.etaMax == null || (etaOf(o) && etaOf(o).min <= state.etaMax);
+const walkOk = o => state.walkMax == null || (walkOf(o) && walkOf(o).min <= state.walkMax);
 
 function luTxt(o) {  // 토지이용계획 한 줄(브이월드, PC 동기화) — 없으면 빈칸
   return o.landuse ? `<span class="pop-k">토지이용: ${o.landuse}${o.tojihuh ? ' <b style="color:#b45309">(토허 — 일반매매는 허가·실거주 필요, 경매는 면제)</b>' : ""}</span><br>` : "";
 }
 
-const etaTxt = o => { const e = etaOf(o); return e ? ` · 충정로 ~${e.min}분 <span class="dim">(${e.st}역 도보 ${e.walk}분)</span>` : ""; };
+const walkTxt = o => { const w = walkOf(o); return w ? ` · ${w.st}역 도보 ${w.min}분 <span class="dim">(${w.lines.join("·")})</span>` : ""; };
 const PY = 3.3058;
 // 평 단위 값: 경매는 대지권·건물(전용)㎡, 네이버 매물은 추정 지분·네이버 전용평
 const shareOf = r => r.land ? r.land / PY : null;
@@ -160,24 +156,19 @@ try { const s = JSON.parse(localStorage.getItem("auction-map-filters") || "null"
   if (s) { state.max = s.max;
     // 새로 추가된 구는 기본으로 켜고, 예전에 직접 끈 구만 계속 끔
     state.sggs = new Set(DATA.districts.filter(g => s.sggs.includes(g) || !(s.known || ["마포구", "용산구", "서대문구", "구로구", "은평구", "영등포구"]).includes(g)));
-    if (typeof s.homeKm === "number") state.homeKm = s.homeKm;
-    if (typeof s.etaMax === "number") state.etaMax = s.etaMax;
+    if (typeof s.walkMax === "number") state.walkMax = s.walkMax;
     if (s.listTab) state.listTab = s.listTab; state.statuses = new Set(s.statuses); state.zoneOnly = s.zoneOnly;
     ["shareMin", "shareMax", "excMin", "excMax"].forEach(k => { if (typeof s[k] === "number" && !(k.endsWith("Min") && s[k] <= 0)) state[k] = s[k]; }); } } catch (e) {}
 const persist = () => { try { localStorage.setItem("auction-map-filters", JSON.stringify({
   max: state.max, sggs: [...state.sggs], statuses: [...state.statuses], zoneOnly: state.zoneOnly,
   shareMin: state.shareMin, shareMax: state.shareMax, excMin: state.excMin, excMax: state.excMax,
-  homeKm: state.homeKm, etaMax: state.etaMax, known: DATA.districts, listTab: state.listTab })); } catch (e) {} };
+  walkMax: state.walkMax, known: DATA.districts, listTab: state.listTab })); } catch (e) {} };
 
 const map = L.map("map", { zoomControl: true }).setView([37.555, 126.955], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19, attribution: "&copy; OpenStreetMap",
 }).addTo(map);
 
-L.marker([HOME.lat, HOME.lng], { icon: L.divIcon({ className: "", iconAnchor: [8, 8],
-  html: `<div style="width:16px;height:16px;border-radius:50%;background:#0ea5e9;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.3)"></div>` }),
-  zIndexOffset: 1000 }).bindPopup(`<div class="pop-h">${HOME.name}</div><span class="pop-k">거리 필터 기준점</span>`).addTo(map);
-const homeRing = L.circle([HOME.lat, HOME.lng], { radius: 1, color: "#0ea5e9", weight: 1.5, dashArray: "4 6", fill: false, interactive: false }).addTo(map);
 // 지하철역: 항상 보이게(노선 색 테두리), 줌에 따라 크기·이름 표시
 map.createPane("stations"); map.getPane("stations").style.zIndex = 460;
 const stationLayer = L.layerGroup().addTo(map);
@@ -253,7 +244,7 @@ function renderListings() {
   DATA.dong_groups.forEach(g0 => {
     if (shareOn || state.zoneOnly) return;  // 위치 미상 매물은 지분·구역 판정 불가 → 숨김
     if (!state.sggs.has(guOf(g0))) return;  // 구 칩 켜기/끄기 적용
-    if (!etaOk(g0)) return;
+    if (!walkOk(g0)) return;
     const items = g0.items.filter(i => inRange(i.exc_py ?? null, state.excMin, state.excMax) && (i.price || 0) <= state.max);
     if (!items.length) return;
     const g = { ...g0, items, n: items.length };
@@ -274,8 +265,7 @@ function renderListings() {
     if (shareSet && !inRange(lShare(l), state.shareMin, state.shareMax)) return;
     if (excSet && !inRange(lExc(l), state.excMin, state.excMax)) return;
     const unknownArea = (shareSet && lShare(l) == null) || (excSet && lExc(l) == null);
-    if (state.homeKm != null && kmFromHome(l) > state.homeKm) return;
-    if (!etaOk(l)) return;
+    if (!walkOk(l)) return;
     const icon = L.divIcon({ className: "", iconSize: [18, 18], iconAnchor: [9, 9],
       html: `<div style="width:14px;height:14px;transform:rotate(45deg);background:${VERDICT[l.verdict] || "#7c3aed"};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25);opacity:${unknownArea ? .4 : 1}${l.zone ? ";outline:2px solid " + css("--zone") + ";outline-offset:2px" : ""}"></div>` });
     const b = l.bld, bm = l.bench;
@@ -288,7 +278,7 @@ function renderListings() {
     const lm = L.marker([l.lat, l.lng], { icon }); lmarkers.set(lid, lm);
     lm.bindPopup(
       `<div class="pop-h">◆ ${l.name} · ${l.verdict}</div>
-       <span class="pop-k">네이버 부동산 매물 · ${l.query.replace("서울 ", "")}${l.geo_how ? ` · 위치: ${l.geo_how}${l.geo_addr ? " (" + l.geo_addr + ")" : ""}` : ""}${l.parcel_by_name ? ` → ${l.parcel} <span style="color:#b45309">(건물명 검색 — 다른 건물일 수 있음)</span>` : ""} · ${l.seen} 확인</span>${etaTxt(l)}<br>${luTxt(l)}
+       <span class="pop-k">네이버 부동산 매물 · ${l.query.replace("서울 ", "")}${l.geo_how ? ` · 위치: ${l.geo_how}${l.geo_addr ? " (" + l.geo_addr + ")" : ""}` : ""}${l.parcel_by_name ? ` → ${l.parcel} <span style="color:#b45309">(건물명 검색 — 다른 건물일 수 있음)</span>` : ""} · ${l.seen} 확인</span>${walkTxt(l)}<br>${luTxt(l)}
        매매가 <b>${fmt(l.price)}</b>${lExc(l) ? ` · 전용 ${py1(lExc(l))}평` : ""}${share}${l.share_src ? `<br><span class="pop-k">지분 근거: ${l.share_src}</span>` : ""}${cmp}${bl}${tr}<br>
        ${unknownArea ? `<span class="pop-k">면적 정보가 없어 평수 필터와 상관없이 흐리게 표시</span><br>` : ""}${l.note || ""} ${(l.ids || []).length ? nvLinks(l.ids) : `<a class="nv" target="_blank" rel="noopener" href="https://map.naver.com/p/search/${encodeURIComponent(l.query.replace(/^서울\s*/, ""))}">네이버 지도↗</a> <span class="pop-k">(중개사 여러 곳 묶음 매물이라 매물 링크 없음 — 네이버에서 '매물목록 펼치기' 후 붙여넣으면 링크가 생겨요)</span>`}<br>${l.zone ? `<span class="tag t-zone">${l.zone} 반경 안(대략)</span>` : ""}`).addTo(listingLayer);
   });
@@ -303,7 +293,7 @@ function popup(r) {
   return `<div class="pop-h">${r.address}</div>
     <span class="pop-k">${r.case} · ${r.type}</span><br>
     감정가 <b>${fmt(r.appraised)}</b> · 최저 <b>${fmt(r.lowest)}</b> (${r.ratio ?? "-"}%)<br>
-    유찰 ${r.failures}회 · 매각기일 <b>${r.date || "미정"}</b>${etaTxt(r)}<br>${luTxt(r)}
+    유찰 ${r.failures}회 · 매각기일 <b>${r.date || "미정"}</b>${walkTxt(r)}<br>${luTxt(r)}
     ${r.value_py ? `<span class="pop-k">${r.emd} 실가치(최근 3분기 실거래 전용 평당 중앙값) ${fmt(r.value_py)} → 감정가 <b>${r.vs_appr}%</b> · 최저가 <b>${r.vs_low}%</b> · <a href="./stats.html">시세 통계</a></span><br>` : ""}
     전용 ${r.bldg ?? "-"}㎡(${py1(excOf(r))}평) · 대지권 ${r.land ?? "-"}㎡(${py1(shareOf(r))}평)${r.land ? ` · 대지 평당 ${fmt(r.lowest / shareOf(r))}(최저가 기준)` : ""}${d.year ? " · " + d.year + "년" : ""}<br>
     ${rights}<br>
@@ -314,7 +304,7 @@ function popup(r) {
 function visible(r) {
   return r.appraised <= state.max && state.sggs.has(r.sgg) && state.statuses.has(r.status)
     && (!state.zoneOnly || r.zone) && (!state.newOnly || r.new) && areaOk(shareOf(r), excOf(r))
-    && (state.homeKm == null || (kmFromHome(r) != null && kmFromHome(r) <= state.homeKm)) && etaOk(r);
+    && walkOk(r);
 }
 
 function renderList(rows) {
@@ -323,8 +313,8 @@ function renderList(rows) {
   const nv = shownListings.filter(x => x.l.verdict !== "제외").map(x => {
     const l = x.l, bm = l.bench, ratio = (bm && bm.per_land_py && l.per_py) ? Math.round(l.per_py / bm.per_land_py * 100) : null;
     return { ...x, ratio };
-  }).sort(state.etaMax != null
-    ? (a, b) => (!!b.l.zone - !!a.l.zone) || ((etaOf(a.l)?.min ?? 99) - (etaOf(b.l)?.min ?? 99)) || ((a.l.price || 0) - (b.l.price || 0))
+  }).sort(state.walkMax != null
+    ? (a, b) => (!!b.l.zone - !!a.l.zone) || ((walkOf(a.l)?.min ?? 99) - (walkOf(b.l)?.min ?? 99)) || ((a.l.price || 0) - (b.l.price || 0))
     : (a, b) => (!!b.l.zone - !!a.l.zone) || ((a.ratio ?? 999) - (b.ratio ?? 999)) || ((a.l.price || 0) - (b.l.price || 0)));
   const head = `<div class="ltabs">
       <button class="ltab" aria-pressed="${tab === "auction"}" data-tab="auction">경매 <b>${rows.length}</b></button>
@@ -336,7 +326,7 @@ function renderList(rows) {
       <div class="l1"><span>${r.emd} ${r.type}</span><span class="tag ${STATUS[r.status].cls}">${STATUS[r.status].label}</span>
         ${r.zone ? '<span class="tag t-zone">구역</span>' : ""}${r.new ? '<span class="tag t-new">신규</span>' : ""}</div>
       <div class="l2">${r.address}</div>
-      <div class="l3">감정 ${fmt(r.appraised)} → 최저 ${fmt(r.lowest)} (${r.ratio ?? "-"}%) · 유찰 ${r.failures} · ${r.date || "미정"}${etaOf(r) ? etaTxt(r) : kmFromHome(r) != null ? ` · ${HOME.name} ${kmFromHome(r).toFixed(1)}km` : ""}${r.bldg || r.land ? ` · 전용 ${py1(excOf(r))}평·지분 ${py1(shareOf(r))}평` : ""}${r.lat == null ? " · 좌표 없음" : ""}</div>
+      <div class="l3">감정 ${fmt(r.appraised)} → 최저 ${fmt(r.lowest)} (${r.ratio ?? "-"}%) · 유찰 ${r.failures} · ${r.date || "미정"}${walkTxt(r)}${r.bldg || r.land ? ` · 전용 ${py1(excOf(r))}평·지분 ${py1(shareOf(r))}평` : ""}${r.lat == null ? " · 좌표 없음" : ""}</div>
     </div>`).join("") : `<div class="empty">조건에 맞는 경매 물건이 없어요.</div>`;
   } else {
     body = !state.showListings ? `<div class="empty">상단의 "◆ 네이버 부동산 매물"을 켜면 목록이 보여요.</div>`
@@ -345,7 +335,7 @@ function renderList(rows) {
       <div class="l1"><span style="color:${VERDICT[l.verdict] || "#7c3aed"}">◆</span><span>${l.name}</span>
         <span class="tag" style="background:var(--chip)">${l.verdict}</span>${l.zone ? '<span class="tag t-zone">구역</span>' : ""}</div>
       <div class="l2">${l.query.replace("서울 ", "")}${l.zone ? " · " + l.zone : ""}</div>
-      <div class="l3"><b>${fmt(l.price)}</b>${lExc(l) ? ` · 전용 ${py1(lExc(l))}평` : ""}${l.share_py ? ` · 지분 ${l.share_py}평 · 지분 평당 ${fmt(l.per_py)}` : ""}${ratio != null ? ` · <span class="${ratio <= 90 ? "cheap" : ratio >= 120 ? "pricey" : ""}">동 기준 ${ratio}%</span>` : ""}${unknownArea ? " · 면적 정보 없음" : ""}${etaTxt(l)}</div>
+      <div class="l3"><b>${fmt(l.price)}</b>${lExc(l) ? ` · 전용 ${py1(lExc(l))}평` : ""}${l.share_py ? ` · 지분 ${l.share_py}평 · 지분 평당 ${fmt(l.per_py)}` : ""}${ratio != null ? ` · <span class="${ratio <= 90 ? "cheap" : ratio >= 120 ? "pricey" : ""}">동 기준 ${ratio}%</span>` : ""}${unknownArea ? " · 면적 정보 없음" : ""}${walkTxt(l)}</div>
     </div>`).join("") + (nv.length > 400 ? `<div class="empty">상위 400건만 표시 — 필터로 좁혀보세요.</div>` : "")
       : `<div class="empty">조건에 맞는 네이버 매물이 없어요.</div>`;
   }
@@ -364,12 +354,9 @@ function renderList(rows) {
 function render() {
   renderListings();
   markerLayer.clearLayers(); markers.clear();
-  const rows = DATA.rows.filter(visible).sort(state.etaMax != null
-    ? (a, b) => (etaOf(a)?.min ?? 99) - (etaOf(b)?.min ?? 99)
-    : state.homeKm != null
-    ? (a, b) => (kmFromHome(a) ?? 99) - (kmFromHome(b) ?? 99)
+  const rows = DATA.rows.filter(visible).sort(state.walkMax != null
+    ? (a, b) => (walkOf(a)?.min ?? 99) - (walkOf(b)?.min ?? 99)
     : (a, b) => (a.date || "9").localeCompare(b.date || "9"));
-  homeRing.setRadius(state.homeKm != null ? state.homeKm * 1000 : 1);
   rows.forEach(r => {
     if (r.lat == null) return;
     const m = L.circleMarker([r.lat, r.lng], {
@@ -407,21 +394,12 @@ function buildFilters() {
   });
   sel.addEventListener("change", () => { state.max = Number(sel.value); render(); });
   f.appendChild(sel);
-  const hs = document.createElement("select"); hs.className = "chip";
-  [["", `${HOME.name} 거리 전체`], [2, "충정로역 2km"], [3, "3km"], [5, "5km"], [8, "8km"]].forEach(([v, t]) => {
-    const o = document.createElement("option"); o.value = v; o.textContent = t; if (String(v) === String(state.homeKm ?? "")) o.selected = true; hs.appendChild(o);
+  const ws = document.createElement("select"); ws.className = "chip"; ws.title = "가장 가까운 지하철역까지 도보 시간(직선거리 × 1.25 ÷ 분당 75m, 추정)";
+  [["", "역까지 도보 전체"], [5, "역 도보 5분 이내"], [10, "10분 이내"], [15, "15분 이내"], [20, "20분 이내"]].forEach(([v, tx]) => {
+    const o = document.createElement("option"); o.value = v; o.textContent = tx; if (String(v) === String(state.walkMax ?? "")) o.selected = true; ws.appendChild(o);
   });
-  hs.addEventListener("change", () => {
-    state.homeKm = hs.value === "" ? null : Number(hs.value); render();
-    if (state.homeKm != null) map.fitBounds(L.latLng(HOME.lat, HOME.lng).toBounds(state.homeKm * 2000));
-  });
-  f.appendChild(hs);
-  const es = document.createElement("select"); es.className = "chip"; es.title = "가까운 역 도보 + 지하철 시간으로 계산한 추정치(±5분)";
-  [["", "충정로까지 시간 전체"], [20, "충정로 20분 이내(추정)"], [30, "30분 이내(추정)"], [40, "40분 이내(추정)"]].forEach(([v, tx]) => {
-    const o = document.createElement("option"); o.value = v; o.textContent = tx; if (String(v) === String(state.etaMax ?? "")) o.selected = true; es.appendChild(o);
-  });
-  es.addEventListener("change", () => { state.etaMax = es.value === "" ? null : Number(es.value); render(); });
-  f.appendChild(es);
+  ws.addEventListener("change", () => { state.walkMax = ws.value === "" ? null : Number(ws.value); render(); });
+  f.appendChild(ws);
   const range = (label, kLo, kHi) => {
     const w = document.createElement("span"); w.className = "chip range";
     w.innerHTML = `${label} <input type="number" inputmode="decimal" min="0" step="1" placeholder="최소"> ~ <input type="number" inputmode="decimal" min="0" step="1" placeholder="최대"> 평`;
