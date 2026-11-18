@@ -103,17 +103,23 @@ const DATA = {"updated": "2026-11-12 11:57", "districts": ["종로구", "중구"
 DATA.listings = DATA.listings || [];
 const fmt = n => n >= 1e8 ? (Math.floor(n / 1e8) + "억" + (Math.round(n % 1e8 / 1e4) ? " " + Math.round(n % 1e8 / 1e4).toLocaleString() + "만" : "")) : Math.round(n / 1e4).toLocaleString() + "만";
 const STATUS = {
-  clean:   { label: "권리 깨끗", cls: "t-clean" },
+  clean:   { label: "권리 깨끗*", cls: "t-clean" },
   check:   { label: "임차인 확인", cls: "t-check" },
   risky:   { label: "인수·지분 위험", cls: "t-risky" },
   unknown: { label: "권리 미조회", cls: "t-unknown" },
 };
+// 유형 묶음: 리치고 용도(예: '다가구주택/대지') → 4가지
+const KINDS = { apt: "아파트", villa: "다세대·연립", house: "단독·다가구", etc: "기타" };
+const kindOf = r => { const t = r.type || "";
+  return /아파트/.test(t) ? "apt" : /^(다세대|연립|대지\/연립)/.test(t) ? "villa"
+    : /단독|다가구|다중|근린주택/.test(t) ? "house" : "etc"; };
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
 const state = {
   max: 400000000,
   sggs: new Set(DATA.districts),
   statuses: new Set(["clean", "check", "risky", "unknown"]),
+  kinds: new Set(["apt", "villa", "house", "etc"]),
   zoneOnly: false, newOnly: false, showListings: true,
   shareMin: null, shareMax: null, excMin: null, excMax: null, walkMax: null,
 };
@@ -158,11 +164,12 @@ try { const s = JSON.parse(localStorage.getItem("auction-map-filters") || "null"
     state.sggs = new Set(DATA.districts.filter(g => s.sggs.includes(g) || !(s.known || ["마포구", "용산구", "서대문구", "구로구", "은평구", "영등포구"]).includes(g)));
     if (typeof s.walkMax === "number") state.walkMax = s.walkMax;
     if (s.listTab) state.listTab = s.listTab; state.statuses = new Set(s.statuses); state.zoneOnly = s.zoneOnly;
+    if (Array.isArray(s.kinds)) state.kinds = new Set(s.kinds);
     ["shareMin", "shareMax", "excMin", "excMax"].forEach(k => { if (typeof s[k] === "number" && !(k.endsWith("Min") && s[k] <= 0)) state[k] = s[k]; }); } } catch (e) {}
 const persist = () => { try { localStorage.setItem("auction-map-filters", JSON.stringify({
   max: state.max, sggs: [...state.sggs], statuses: [...state.statuses], zoneOnly: state.zoneOnly,
   shareMin: state.shareMin, shareMax: state.shareMax, excMin: state.excMin, excMax: state.excMax,
-  walkMax: state.walkMax, known: DATA.districts, listTab: state.listTab })); } catch (e) {} };
+  walkMax: state.walkMax, known: DATA.districts, listTab: state.listTab, kinds: [...state.kinds] })); } catch (e) {} };
 
 const map = L.map("map", { zoomControl: true }).setView([37.555, 126.955], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -302,7 +309,7 @@ function popup(r) {
 }
 
 function visible(r) {
-  return r.appraised <= state.max && state.sggs.has(r.sgg) && state.statuses.has(r.status)
+  return r.appraised <= state.max && state.sggs.has(r.sgg) && state.statuses.has(r.status) && state.kinds.has(kindOf(r))
     && (!state.zoneOnly || r.zone) && (!state.newOnly || r.new) && areaOk(shareOf(r), excOf(r))
     && walkOk(r);
 }
@@ -417,6 +424,11 @@ function buildFilters() {
   f.appendChild(chip("🚇 지하철역", true, () => { map.hasLayer(stationLayer) ? map.removeLayer(stationLayer) : map.addLayer(stationLayer); }, null));
   f.appendChild(chip(`신통 ${DATA.zones.filter(z => z.sintong).length}곳 · 진한 실선=구역지정 ${DATA.zones.filter(z => z.sintong && z.designated).length}`, true, () => { map.hasLayer(stLayer) ? map.removeLayer(stLayer) : map.addLayer(stLayer); }, null));
   f.appendChild(chip(`정비사업장 ${DATA.zones.filter(z => z.site).length}곳`, true, () => { map.hasLayer(siteLayer) ? map.removeLayer(siteLayer) : map.addLayer(siteLayer); }, null));
+  const s0 = document.createElement("span"); s0.className = "sep"; f.appendChild(s0);
+  Object.entries(KINDS).forEach(([k, v]) => {
+    const n = DATA.rows.filter(r => kindOf(r) === k).length;
+    f.appendChild(chip(`${v} ${n}`, state.kinds.has(k), () => state.kinds.has(k) ? state.kinds.delete(k) : state.kinds.add(k)));
+  });
   const s1 = document.createElement("span"); s1.className = "sep"; f.appendChild(s1);
   Object.entries(STATUS).forEach(([k, v]) =>
     f.appendChild(chip(v.label, state.statuses.has(k), () => state.statuses.has(k) ? state.statuses.delete(k) : state.statuses.add(k), "--" + k)));
@@ -432,7 +444,7 @@ function buildFilters() {
   DATA.districts.forEach(g => { const b = chip(g, state.sggs.has(g), () => state.sggs.has(g) ? state.sggs.delete(g) : state.sggs.add(g)); b.dataset.sgg = g; f.appendChild(b); });
 }
 
-document.getElementById("meta").innerHTML = `${DATA.updated} 기준 · 리치고 진행 중 경매(주거시설) · 매일 갱신 · <a href="./stats.html">시세 통계 →</a>`;
+document.getElementById("meta").innerHTML = `${DATA.updated} 기준 · 리치고 진행 중 경매(주거시설) · 매일 갱신 · <a href="./stats.html">시세 통계 →</a><br><span class="dim">* 권리 깨끗 = 등기상 인수 권리·대항력 임차인 없음 기준. 지분매각 여부는 리치고 공개 데이터에 없어 걸러지지 않음 → 상세 페이지 상단 해시태그 확인</span>`;
 const missing = DATA.rows.filter(r => r.lat == null).length;
 const warns = [];
 if (!DATA.geocoding || missing) warns.push(`좌표를 못 찾은 물건 ${missing}건은 목록에만 표시돼요.`);
