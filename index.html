@@ -103,7 +103,7 @@ const DATA = {"updated": "2026-11-18 12:16", "districts": ["종로구", "중구"
 DATA.listings = DATA.listings || [];
 // 지분매각 의심: 리치고 공개 데이터엔 #지분매각 태그가 없어서, 감정가가 그 동네 실거래 시세보다 지나치게 낮으면 표시
 // (예: 대림 신동아 1013호 2/3 지분 — 같은 평형 전체 호실 감정가 6.46억인데 3.95억, 동 시세 대비 53%)
-const shareSuspect = r => r.vs_appr != null && r.vs_appr < (/아파트/.test(r.type || "") ? 65 : 55);
+const shareSuspect = r => r.vs_appr != null && r.vs_appr < (/아파트/.test(r.type || "") ? 60 : 55);
 DATA.rows.forEach(r => { if (shareSuspect(r)) { r.suspect = true; if (r.status === "clean") r.status = "check"; } });
 const fmt = n => n >= 1e8 ? (Math.floor(n / 1e8) + "억" + (Math.round(n % 1e8 / 1e4) ? " " + Math.round(n % 1e8 / 1e4).toLocaleString() + "만" : "")) : Math.round(n / 1e4).toLocaleString() + "만";
 const STATUS = {
@@ -448,7 +448,7 @@ function buildFilters() {
   DATA.districts.forEach(g => { const b = chip(g, state.sggs.has(g), () => state.sggs.has(g) ? state.sggs.delete(g) : state.sggs.add(g)); b.dataset.sgg = g; f.appendChild(b); });
 }
 
-document.getElementById("meta").innerHTML = `${DATA.updated} 기준 · 리치고 진행 중 경매(주거시설) · 매일 갱신 · <a href="./stats.html">시세 통계 →</a><br><span class="dim">* 권리 깨끗 = 등기상 인수 권리·대항력 임차인 없음 기준. 지분매각은 리치고 공개 데이터에 없어, 감정가가 동네 시세의 65%(아파트)·55%(그 외) 미만이면 '지분 의심'으로 표시하고 '임차인 확인' 쪽으로 내림 — 그래도 새는 건 상세 페이지 해시태그로 확인</span>`;
+document.getElementById("meta").innerHTML = `${DATA.updated} 기준 · 리치고 진행 중 경매(주거시설) · 매일 갱신 · <a href="./stats.html">시세 통계 →</a><br><span class="dim">* 권리 깨끗 = 등기상 인수 권리·대항력 임차인 없음 기준. 지분매각은 리치고 공개 데이터에 없어, 감정가가 동네 시세의 60%(아파트)·55%(그 외) 미만이면 '지분 의심'으로 표시하고 '임차인 확인' 쪽으로 내림 — 그래도 새는 건 상세 페이지 해시태그로 확인</span>`;
 const missing = DATA.rows.filter(r => r.lat == null).length;
 const warns = [];
 if (!DATA.geocoding || missing) warns.push(`좌표를 못 찾은 물건 ${missing}건은 목록에만 표시돼요.`);
